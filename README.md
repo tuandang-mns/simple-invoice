@@ -68,6 +68,7 @@ simple-invoice/
 ├── frontend/         React SPA           → frontend/README.md
 ├── docs/
 │   ├── ARCHITECTURE.md   data model, API contract, business rules, security, AWS deployment, banking/payments roadmap
+│   ├── DECISIONS.md      decision log: what we chose, what we rejected, why, and the cost
 │   ├── TEST-CASES.md     acceptance cases (UI + API) and the QA log with defects D1–D15
 │   └── UI-REVIEW.md      design decisions and accessibility/contrast audit
 ├── scripts/api-test.mjs  black-box API tests against a running stack
@@ -92,7 +93,7 @@ CI (`.github/workflows/ci.yml`) runs lint, typecheck and all tests on every push
 
 ## Key design decisions
 
-Details and trade-offs are in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+Details and trade-offs are in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md); every choice with the alternatives we rejected is in [`docs/DECISIONS.md`](docs/DECISIONS.md).
 
 1. **Overdue is derived, never stored.** A pure function derives it for display. For filtering, each status becomes a SQL predicate (e.g. `Overdue` = `status <> 'Paid' AND due_date < today`, and `Pending` excludes overdue rows), so counts and pagination stay correct.
 2. **"Today" uses a business timezone** (`APP_TIMEZONE`, default `Asia/Singapore`), not the server clock's timezone.
@@ -123,7 +124,7 @@ Details and trade-offs are in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 - **JWT is kept in `sessionStorage`**. It's cleared on tab close and the frontend has a strict CSP, but this is still readable by JavaScript if an XSS bug existed. The production path is a BFF with httpOnly cookies.
 - **No refresh tokens**: the user signs in again when the token expires (default 1 h).
 - **Sorting by amount across currencies** compares raw numbers (no FX conversion).
-- **Amounts are JSON numbers**, exact only up to the documented caps. Production would send strings and store integer minor units.
+- **Amounts travel as JSON numbers.** Storage (`NUMERIC`) and maths (`decimal.js`) are exact decimals; the weak link is only the JSON number, which clients read as a binary float that holds cents exactly up to about 90 trillion. The caps keep the largest possible total at 2×10^13, about 4.5× below that, so every amount the API returns today is exact. Raising the caps, returning cross-invoice aggregates or adding currencies with more decimals would require the switch to decimal strings (`"2180.00"`); the migration path is in [`docs/ARCHITECTURE.md` §10.1](docs/ARCHITECTURE.md#101-money-representation).
 - **No `Idempotency-Key`**: a retry after a network timeout gets `409` (the invoice number acts as the business key) rather than the original `201` response.
 - **No events, webhooks or reconciliation**: no outbox, no inbox deduplication for PSP callbacks, and no matching against bank statements.
 - **Authorization is authentication-only**: any valid token sees everything (per the spec); no ownership scope, approval limits or maker-checker.

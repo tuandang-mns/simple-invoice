@@ -2,6 +2,7 @@
 
 Monorepo: `backend/` (NestJS 11 + Fastify + Prisma 6 + PostgreSQL) and `frontend/` (React 19 + Vite + MUI).
 Design decisions live in `docs/ARCHITECTURE.md` — read it before changing behaviour.
+`docs/DECISIONS.md` records why each choice was made; a new library or non-obvious design choice gets an entry there in the same change.
 
 ## Commands
 - Backend: `npm run lint`, `npm run typecheck`, `npm test` (unit), `npm run test:e2e` (needs Docker), `npm run seed`
