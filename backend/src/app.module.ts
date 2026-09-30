@@ -12,12 +12,16 @@ import { InvoicesModule } from './invoices/invoices.module';
     ConfigModule.forRoot({ isGlobal: true, cache: true, validate: validateEnv }),
     ThrottlerModule.forRootAsync({
       inject: [ConfigService],
-      useFactory: (config: ConfigService<EnvironmentVariables, true>) => [
-        {
-          ttl: config.get('LOGIN_RATE_TTL', { infer: true }) * 1000,
-          limit: config.get('LOGIN_RATE_LIMIT', { infer: true }),
-        },
-      ],
+      useFactory: (config: ConfigService<EnvironmentVariables, true>) => {
+        const ttlSeconds = config.get('LOGIN_RATE_TTL', { infer: true });
+        return {
+          throttlers: [
+            { ttl: ttlSeconds * 1000, limit: config.get('LOGIN_RATE_LIMIT', { infer: true }) },
+          ],
+          // The default ("ThrottlerException: Too Many Requests") leaks a class name to the UI.
+          errorMessage: `Too many sign-in attempts. Please wait ${ttlSeconds} seconds and try again.`,
+        };
+      },
     }),
     DatabaseModule,
     AuthModule,

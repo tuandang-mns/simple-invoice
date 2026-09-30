@@ -11,7 +11,7 @@ Manual and scripted acceptance tests for every feature in the spec (§2.1–§2.
 | **Data** | Fresh seed: Appendix A + 40 generated invoices (10 Draft / 8 Pending / 13 Paid / 10 Overdue). Test "today" = 2026-09-29 (Asia/Singapore) |
 | **UI tested in** | Google Chrome (Claude in Chrome) at 1512 px wide, plus the built-in browser with 375×812 mobile emulation |
 | **API tested with** | [`scripts/api-test.mjs`](../scripts/api-test.mjs) (repeatable, no dependencies) |
-| **Result** | ✅ **All cases pass** after fixing the 13 defects listed below (two passes plus a currency review) |
+| **Result** | ✅ **All cases pass** after fixing the 15 defects listed below (two passes, a currency review and a fresh-clone run) |
 
 ### How to re-run
 
@@ -47,15 +47,22 @@ Probes beyond the spec, run against a fresh stack. Fixed and covered by tests:
 | D8 | Medium | qty 999,999 × rate 999,999,999.99 | Totals above ~90 trillion **lost their cents** in the JSON response (JS numbers are exact only below 2^53 / 100) | Caps: quantity ≤ 100,000, rate ≤ 100,000,000 (largest total 2×10^13), mirrored in the form | DTO + form schema tests |
 | D9 | Low | Invoice dated year 9999 | Accepted by the API (the UI filters already limited years to 1900–2999) | Named `isPlausibleYear` validator (1900–2999) on every API date, mirrored in the form | DTO + form schema tests |
 | D10 | Low | Date `03/07/2026` | Also produced a misleading "dueDate must be on or after invoiceDate" (string compare on invalid input). Adding the year check revealed that a second `@Matches` silently replaces the first one's message (class-validator keys constraints by name). | Due-date rule only compares valid dates; year rule registered under its own name | Existing DTO test now asserts the exact messages |
-
 | D11 | Medium | 200-character customer name with no spaces, in the list | The Customer column stretched to about 1,730 px and pushed the date, total and status columns off-screen | List cells cap their width and ellipsize, with the full text as a tooltip; detail line items wrap | `InvoiceListPage.test.tsx`: "truncates very long values…" |
 | D12 | Low | "Session expired" banner | Used MUI's default cyan info colour, outside the single-accent palette | `palette.info` mapped to the brand navy | Visual check |
-
 | D13 | Medium | VND invoice with rate `1000.50` (found while reviewing a payment-systems reference: "use a scale table per currency") | VND has **0 minor units** (ISO 4217), but the app accepted decimals and rounded VND tax to 2 decimal places | Currency scale table (`minorUnits`: 2, VND 0) drives validation, rounding (tax to whole dong), UI formatting (`₫47,304,527`) and input steps; the seed now includes VND invoices | Calculator, DTO and form-schema unit tests; detail page test; `TC-CREATE-API-14` |
 
 Verified correct in the same pass (UI): a `<script>` customer name renders as text and nothing executes; a corrupted token → 401 → session cleared → "Your session has expired" on /login; **double-clicking Create sends exactly one POST**; a 200-character name wraps cleanly on the detail page.
 
 Verified correct in the same pass (API): 5 parallel creates with the same number → exactly one 201 and four 409s; accented search (`Nguyễn` / `NGUYỄN` / `ánh`); `page=2147483648` → empty page; `pageSize=abc`, `page=-1`, `page=1.5` → clear 400s; 2 MB body → 413 in the standard error shape; 201-character name, lowercase currency and 2027-02-29 → 400.
+
+### Third pass: fresh clone from GitHub (2026-09-30)
+
+The public repository was cloned over HTTPS into an empty folder (no credentials, no local files) and run exactly as the README says: `docker compose up --build` from an empty volume. All three services were healthy in about 30 s (with a warm build cache); migrations, seed and the Appendix A self-check ran on start. Then, inside the clone: `npm ci` and lint, typecheck, unit, e2e and build for both parts, the API script and the Playwright flow, and a manual pass in Chrome (login, wrong password, search, Overdue filter + amount sort, Appendix A detail, validation, a VND invoice, case-insensitive duplicate, deep paging, sign-out guard). Everything passed; the manual pass found two presentation defects:
+
+| # | Severity | Found in | Defect | Fix | Regression test |
+|---|---|---|---|---|---|
+| D14 | Medium | Login after the rate limit was reached | The login page showed the raw **"ThrottlerException: Too Many Requests"**, an internal class name, as the error message | The throttler's `errorMessage` is set once in the API: "Too many sign-in attempts. Please wait 60 seconds and try again." (uses `LOGIN_RATE_TTL`) | `TC-AUTH-16` now also checks the message text and the `Retry-After` header; verified in Chrome |
+| D15 | Low | Invoice detail, "Created" field | Showed "30 **Sept** 2026" while every other date showed "30 Sep 2026": `formatDateTime` used the browser's `en-GB` locale data, which spells September "Sept" in newer browsers | `formatDateTime` uses the same month names as `formatDate` | `format.test.ts`: "formats timestamps with the same month names as dates" |
 
 **Not defects (noted during testing):**
 - The automation tool's `type` action can't fill native date inputs; real key presses work.
@@ -150,7 +157,7 @@ Verified correct in the same pass (API): 5 parallel creates with the same number
 |---|---|---|
 | Backend unit | `cd backend && npm test` | 72 / 72 ✅ |
 | Backend e2e (Testcontainers) | `cd backend && npm run test:e2e` | 51 / 51 ✅ |
-| Frontend | `cd frontend && npm test` | 56 / 56 ✅ |
+| Frontend | `cd frontend && npm test` | 57 / 57 ✅ |
 | API black-box | `RUN_RATE_LIMIT=1 node scripts/api-test.mjs` | 33 / 33 ✅ |
 | Browser smoke (Playwright) | `cd frontend && npm run test:e2e` | 1 / 1 ✅ (also 3 / 3 with `--repeat-each=3`, parallel) |
 | Lint + typecheck | `npm run lint && npm run typecheck` (both apps) | clean ✅ |

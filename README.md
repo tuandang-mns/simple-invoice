@@ -68,7 +68,7 @@ simple-invoice/
 ├── frontend/         React SPA           → frontend/README.md
 ├── docs/
 │   ├── ARCHITECTURE.md   data model, API contract, business rules, security, AWS deployment, banking/payments roadmap
-│   ├── TEST-CASES.md     acceptance cases (UI + API) and the QA log with defects D1–D13
+│   ├── TEST-CASES.md     acceptance cases (UI + API) and the QA log with defects D1–D15
 │   └── UI-REVIEW.md      design decisions and accessibility/contrast audit
 ├── scripts/api-test.mjs  black-box API tests against a running stack
 ├── docker-compose.yml
@@ -82,11 +82,11 @@ simple-invoice/
 |---|---|---|
 | Backend unit | 72 | `cd backend && npm test` |
 | Backend e2e (real PostgreSQL via Testcontainers) | 51 | `cd backend && npm run test:e2e` |
-| Frontend | 56 | `cd frontend && npm test` |
+| Frontend | 57 | `cd frontend && npm test` |
 | Black-box API (against the running stack) | 32 | `node scripts/api-test.mjs` |
 | Browser smoke test (Playwright, against the running stack) | 1 flow | `cd frontend && npm run test:e2e` |
 
-CI (`.github/workflows/ci.yml`) runs lint, typecheck and all tests on every push and pull request, then starts the full stack with `docker compose up` and runs the API script and the browser test against it. What each suite covers is in the backend and frontend READMEs; the acceptance cases and the QA log (13 defects found and fixed, most with a regression test) are in [`docs/TEST-CASES.md`](docs/TEST-CASES.md).
+CI (`.github/workflows/ci.yml`) runs lint, typecheck and all tests on every push and pull request, then starts the full stack with `docker compose up` and runs the API script and the browser test against it. What each suite covers is in the backend and frontend READMEs; the acceptance cases and the QA log (15 defects found and fixed, most with a regression test) are in [`docs/TEST-CASES.md`](docs/TEST-CASES.md).
 
 ---
 

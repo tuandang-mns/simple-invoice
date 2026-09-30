@@ -33,14 +33,16 @@ export function formatMoney(amount: number, currencySymbol = '', decimals = 2): 
   return `${sign}${currencySymbol}${amountFormatter(decimals).format(Math.abs(amount))}`;
 }
 
+/**
+ * Timestamp → "30 Sep 2026, 14:52" in the browser's local time. Built from the same month
+ * names as formatDate: Intl's en-GB short month is "Sept" in newer browsers, which made the
+ * "Created" field disagree with every other date on the page.
+ */
 export function formatDateTime(iso: string): string {
-  return new Date(iso).toLocaleString('en-GB', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${pad(date.getDate())} ${MONTHS[date.getMonth()]} ${date.getFullYear()}, ${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
 /** Today's date as YYYY-MM-DD in the browser's local timezone (for form defaults). */

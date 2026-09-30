@@ -72,7 +72,7 @@ In Docker, the build is served by nginx on port 8080 with a strict Content-Secur
 
 ## Tests
 
-**Component tests:** 56 Vitest + React Testing Library tests:
+**Component tests:** 57 Vitest + React Testing Library tests:
 
 | Area | Covers |
 |---|---|

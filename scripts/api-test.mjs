@@ -330,10 +330,14 @@ await test('TC-CREATE-API-13', 'Malformed JSON body → 400 in the standard erro
 // ---------------------------------------------------------------- rate limit (optional)
 if (process.env.RUN_RATE_LIMIT) {
   console.log('Rate limiting');
-  await test('TC-AUTH-16', 'Login is throttled after repeated attempts (429)', async () => {
-    const statuses = [];
-    for (let i = 0; i < 12; i++) statuses.push((await call('POST', '/auth/login', { auth: false, body: { email: EMAIL, password: 'x' } })).status);
-    assert(statuses.includes(429), `expected a 429, got ${statuses.join(',')}`);
+  await test('TC-AUTH-16', 'Login is throttled after repeated attempts (429, readable message)', async () => {
+    const responses = [];
+    for (let i = 0; i < 12; i++) responses.push(await call('POST', '/auth/login', { auth: false, body: { email: EMAIL, password: 'x' } }));
+    const throttled = responses.find((r) => r.status === 429);
+    assert(throttled, `expected a 429, got ${responses.map((r) => r.status).join(',')}`);
+    // Shown as-is on the login page, so it must read like a sentence, not a class name.
+    assert(/^Too many sign-in attempts/.test(throttled.body.message), `unexpected message: ${JSON.stringify(throttled.body.message)}`);
+    assert(throttled.headers.get('retry-after'), 'expected a Retry-After header');
   });
 }
 
