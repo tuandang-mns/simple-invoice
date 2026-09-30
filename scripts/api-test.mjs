@@ -17,6 +17,9 @@ const RUN = Date.now().toString(36).toUpperCase();
 let token = '';
 const results = [];
 
+const RATE_LIMIT_HINT =
+  'Login is rate-limited (LOGIN_RATE_LIMIT per LOGIN_RATE_TTL, default 10 per minute per IP) and this script signs in several times, so two runs within a minute can trip it. Wait a minute and run again.';
+
 async function call(method, path, { body, auth = true, headers = {} } = {}) {
   const res = await fetch(`${API}${path}`, {
     method,
@@ -146,6 +149,13 @@ await test('TC-AUTH-15', 'Unknown extra fields in the login body are rejected', 
   eq(r.status, 400, 'status');
   assert(r.body.message.includes('property role should not exist'), 'names the field');
 });
+
+// Everything below needs a token. Without one (usually the login rate limit after a recent run),
+// stop with a clear message instead of failing every remaining case.
+if (!token) {
+  console.error(`\nCould not sign in, so the remaining cases were not run.\n${RATE_LIMIT_HINT}\n`);
+  process.exit(1);
+}
 
 // ---------------------------------------------------------------- list
 console.log('Invoice list');
@@ -343,4 +353,6 @@ if (process.env.RUN_RATE_LIMIT) {
 
 const failed = results.filter((r) => !r.ok);
 console.log(`\n${results.length - failed.length}/${results.length} passed${failed.length ? ` — FAILED: ${failed.map((f) => f.id).join(', ')}` : ''}\n`);
+// A 429 means the login rate limit, not a broken endpoint: say so instead of leaving it to guesswork.
+if (failed.some((f) => /got 429/.test(f.error ?? '') && f.id !== 'TC-AUTH-16')) console.log(`${RATE_LIMIT_HINT}\n`);
 process.exit(failed.length ? 1 : 0);

@@ -192,7 +192,7 @@ Rule for new work: a new library or a non-obvious design choice gets an entry he
 - **Chose:** `docker compose up` works with no `.env`; the API container migrates and seeds on start. Seed dates are relative to today, so every status appears whenever it's reviewed; Appendix A is self-checked.
 - **Instead of:** asking reviewers to create secrets, or running migrations as a separate job.
 - **Why:** "Packaging" is judged on minimal setup.
-- **Cost:** the defaults are demo-only (documented). In production, migrations run as a separate job before rollout (ARCHITECTURE §9).
+- **Cost:** the fallback DB password and JWT secret are public, so a deployment that kept them could have its tokens forged. Mitigated for the demo by binding every port to `127.0.0.1`; in production, secrets come from AWS Secrets Manager (see *Considered and deferred*) and migrations run as a separate job before rollout (ARCHITECTURE §9).
 
 ### DEC-28 AI agents with rules and a checker
 - **Chose:** `CLAUDE.md` project rules; `backend-engineer` and `frontend-engineer` subagents that each own one folder; a read-only `qa-reviewer` that runs every suite and reviews against the spec.
@@ -214,4 +214,5 @@ Deliberately not built for the assessment. Each has a trigger and a place in the
 | Roles and permissions | The spec says every user sees all invoices | Multiple teams, approval limits, maker-checker | §10.5 |
 | Append-only audit log | No edits or status changes exist yet to audit | Any edit, payment or status transition | §10.3 |
 | Payments ledger | Only create and read are in scope; `totalPaid` is seed data | Recording payments | §10.2 |
+| Generated secrets / secret manager integration | Secrets belong to the platform, not the app; generating them in compose adds moving parts and reviewer friction | Any shared or cloud environment | §9: AWS Secrets Manager via the ECS task definition (Vault as the alternative) |
 | Keyset paging, Redis rate limits | One instance, small data | Many instances, millions of rows | §10.6 (keyset); README limitations (Redis) |

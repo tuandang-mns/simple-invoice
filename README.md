@@ -45,7 +45,7 @@ docker compose down              # stop (data is kept)
 docker compose down -v           # stop and delete the database (fresh start)
 ```
 
-To change a setting, copy `.env.example` to `.env` in the repo root and edit it. The defaults are for local demo only.
+To change a setting, copy `.env.example` to `.env` in the repo root and edit it. The defaults are public local-demo values (see Known limitations), and every port is bound to `127.0.0.1`, so the stack is only reachable from this machine.
 
 **Port already in use?** Pick another host port, e.g. `DB_PORT=5433 docker compose up --build`. The API URL is baked into the web build, so a different API port also needs `VITE_API_BASE_URL=http://localhost:<port>`; a different web port needs `CORS_ORIGIN=http://localhost:<port>`.
 
@@ -131,6 +131,7 @@ Details and trade-offs are in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md); ev
 - **Offset pagination**: fine at this scale; keyset pagination is the plan for large volumes.
 - **Login rate limiting is in-memory per instance**. Multiple instances would need Redis or the WAF.
 - **`VITE_API_BASE_URL` is baked in at build time**, so changing the API URL requires rebuilding the frontend image.
+- **Demo secrets are in `docker-compose.yml`.** The fallback DB password and JWT secret are public local-demo values, so the stack runs with no setup. Anyone who reads this repository could sign tokens for a deployment that kept them. Secrets belong to the platform: in production they come from **AWS Secrets Manager**, injected by the ECS task definition and rotated there (HashiCorp Vault is the alternative for multi-cloud or on-premises). Details in [`docs/ARCHITECTURE.md` §9](docs/ARCHITECTURE.md#9-production-deployment-target-not-built-for-the-assessment). The Docker ports are bound to `127.0.0.1`, so the demo stack is not reachable from other machines.
 - **Swagger UI is on by default** for reviewers. In production, set `SWAGGER_ENABLED=false` (or put the docs behind auth).
 - Hand-written SQL in the migration (functional unique index, trigram indexes, CHECKs) isn't represented in `schema.prisma`. Future `prisma migrate dev` diffs must keep it.
 - **Browser testing is one smoke flow** (Playwright: sign in → create → search → detail → sign out). Edge cases are covered by the backend e2e and frontend component tests; a larger browser suite (mobile viewport, error paths, visual regression) is the next step.
@@ -141,10 +142,11 @@ How each limitation would be solved in production (money as strings/minor units,
 
 ## How this was built (AI-assisted)
 
-The project was built with **Claude Code** as a pair programmer, with me reviewing and steering:
+I built this with **Claude Code** as a pair programmer. I set the direction and made the decisions; the AI wrote most of the code and ran most of the checks. In practice:
 
-1. **Requirements analysis first.** The spec was analysed twice for ambiguities and internal inconsistencies (e.g. the mock stores `Overdue`, and the mock's paging shape differs from §2.3.1). The decisions went into the Assumptions section above.
-2. **Architecture before code.** `docs/ARCHITECTURE.md` (data model, API contract, the status→SQL mapping) was written and reviewed first.
-3. **Incremental build with verification at each step.** Backend, then smoke tests with curl against a real DB, then unit + e2e tests, then frontend, then browser checks on desktop and mobile viewports, then `docker compose up` from an empty volume.
-4. **Guardrails for agents:** [`CLAUDE.md`](CLAUDE.md) records the project rules (money as decimals, date strings, Overdue never stored, backend-only totals) so future AI-assisted changes keep them.
-5. **Scoped subagents:** [`.claude/agents/`](.claude/agents) defines a `backend-engineer` and a `frontend-engineer` (both on Sonnet). Each owns one folder, follows the same rules, must pass that part's lint, typecheck and tests before reporting back, and hands API contract changes over explicitly instead of editing the other side. A read-only `qa-reviewer` then checks the work (maker-checker): it runs every suite and reviews the change against the spec and project rules, but has no edit tools, so it reports and never fixes.
+1. **I kept the scope honest.** With a one-day deadline, the brief to myself was "show what the role needs, don't over-engineer". Production deployment and the banking roadmap are written down ([`ARCHITECTURE.md`](docs/ARCHITECTURE.md) §9–10) instead of half-built.
+2. **Understanding before code.** We read the brief twice for gaps and contradictions (the mock stores `Overdue`; its paging shape differs from §2.3.1) and wrote the architecture before building. My readings of unclear points are in the Assumptions above.
+3. **Nothing was "done" until it ran.** Each stage was checked for real: curl against a real database, unit tests, end-to-end tests on a real PostgreSQL, manual passes in Chrome on desktop and mobile, and finally a fresh clone from GitHub started with one `docker compose up`. These runs found 15 defects; each is logged in [`TEST-CASES.md`](docs/TEST-CASES.md) with its fix.
+4. **I checked the output against domain knowledge, not only against the tests.** Reading about payment systems led to the VND fix (D13: no decimals in dong) and the roadmap. Money as strings was on the table too; I weighed it against the spec's number examples and chose exact numbers within proven limits, with a written trigger for changing it ([DEC-07](docs/DECISIONS.md#dec-07-amounts-leave-the-api-as-json-numbers-with-caps)).
+5. **Every choice is written down.** [`DECISIONS.md`](docs/DECISIONS.md) lists what I chose, what I rejected and the cost, including what I deliberately did not build.
+6. **Guardrails for the next change.** [`CLAUDE.md`](CLAUDE.md) holds the project rules (decimal money, date strings, Overdue never stored, totals only on the server). [`.claude/agents/`](.claude/agents) defines a `backend-engineer` and a `frontend-engineer` (Sonnet), each owning one folder with a fixed definition of done, and a read-only `qa-reviewer` that runs every suite and reviews against the spec. It has no edit tools, so it can report but never fix: the same maker-checker idea banks use for payments.

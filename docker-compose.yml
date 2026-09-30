@@ -4,7 +4,9 @@
 #   postgres → localhost:5432
 #
 # Values come from ./.env if present (see .env.example); otherwise the defaults below apply.
-# The defaults are for LOCAL DEMO ONLY — never reuse them in a real environment.
+# The defaults (DB password, JWT secret) are PUBLIC LOCAL-DEMO values — never reuse them in a real
+# environment; production secrets come from AWS Secrets Manager (docs/ARCHITECTURE.md §9).
+# Ports are bound to 127.0.0.1 so the demo stack is not reachable from other machines on the network.
 
 name: simple-invoice
 
@@ -17,7 +19,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-simpleinvoice}
       POSTGRES_DB: ${POSTGRES_DB:-simpleinvoice}
     ports:
-      - "${DB_PORT:-5432}:5432"
+      - "127.0.0.1:${DB_PORT:-5432}:5432"
     volumes:
       - db-data:/var/lib/postgresql/data
     healthcheck:
@@ -48,7 +50,7 @@ services:
       SEED_USER_PASSWORD: ${SEED_USER_PASSWORD:-Password123!}
       SEED_USER_FULLNAME: ${SEED_USER_FULLNAME:-Demo Admin}
     ports:
-      - "${BACKEND_PORT:-3000}:3000"
+      - "127.0.0.1:${BACKEND_PORT:-3000}:3000"
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/health || exit 1"]
       interval: 10s
@@ -67,7 +69,7 @@ services:
       backend:
         condition: service_healthy
     ports:
-      - "${FRONTEND_PORT:-8080}:8080"
+      - "127.0.0.1:${FRONTEND_PORT:-8080}:8080"
 
 volumes:
   db-data:

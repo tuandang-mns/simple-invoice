@@ -257,7 +257,15 @@ flowchart LR
 ```
 
 * **Pipeline:** PR → lint/test/build → image to ECR → run `prisma migrate deploy` as a one-off task → blue/green deploy.
-* **Secrets:** JWT secret + DB credentials from Secrets Manager, rotated; no secrets in images.
+* **Secrets:** owned by the platform, never by the repository. The JWT signing key and DB credentials live in
+  **AWS Secrets Manager** (encrypted with KMS, access limited by the task's IAM role, every read logged in CloudTrail).
+  The ECS task definition references them (`secrets` → `valueFrom: <secret ARN>`), so ECS injects them as environment
+  variables at start; the app needs no code change, because it already reads env vars and refuses to start without a
+  valid `JWT_SECRET` (fail fast). The RDS password is rotated by Secrets Manager's managed rotation. Rotating the JWT key
+  needs two active keys during the switch (sign with the new one, accept both, identified by a `kid` header).
+  The compose defaults (`JWT_SECRET`, DB password) are public demo values and are never used outside a laptop.
+  *Alternative:* **HashiCorp Vault** when the platform is multi-cloud or on-premises; its database engine can also issue
+  short-lived, per-service DB users instead of one long-lived password.
 * **Edge:** WAF rate limiting + managed rules in front of the API; TLS everywhere.
 * **Auth evolution:** move the frontend behind a **BFF** holding tokens in httpOnly cookies, then to
   **OIDC Authorization Code + PKCE** (e.g. Keycloak/Cognito) with MFA — the BFF is the recommended shape for that.
