@@ -152,4 +152,5 @@ Verified correct in the same pass (API): 5 parallel creates with the same number
 | Backend e2e (Testcontainers) | `cd backend && npm run test:e2e` | 51 / 51 ✅ |
 | Frontend | `cd frontend && npm test` | 56 / 56 ✅ |
 | API black-box | `RUN_RATE_LIMIT=1 node scripts/api-test.mjs` | 33 / 33 ✅ |
+| Browser smoke (Playwright) | `cd frontend && npm run test:e2e` | 1 / 1 ✅ (also 3 / 3 with `--repeat-each=3`, parallel) |
 | Lint + typecheck | `npm run lint && npm run typecheck` (both apps) | clean ✅ |

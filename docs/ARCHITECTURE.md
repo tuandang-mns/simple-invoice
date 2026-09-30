@@ -234,6 +234,7 @@ frontend/src
 | Backend unit | Jest | Totals calculator, Overdue derivation, due-date validator, unique-number → 409 mapping, list query builder, auth service |
 | Backend e2e | Jest + Supertest + **Testcontainers** (real Postgres, real seed data) | Full workflow (login → create → list → detail); **invariants** that must hold for any data: status filters partition the set, paging visits each row exactly once, sort order, inclusive date bounds, list ≡ detail; token attacks (forged, expired, `alg:none`); 400/401/404/409 shapes |
 | Frontend unit | Vitest + React Testing Library | Login form validation & flow, route guard redirect, list rendering/filters/past-the-end page, create-form validation & server defaults, HTTP client interceptors |
+| Browser smoke | Playwright against the running Docker stack (also in CI) | One end-to-end flow through the real UI, API and database: sign in via redirect → create → search → detail totals → sign out |
 
 ## 9. Production deployment (target, not built for the assessment)
 

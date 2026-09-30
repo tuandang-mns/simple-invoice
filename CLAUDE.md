@@ -5,7 +5,7 @@ Design decisions live in `docs/ARCHITECTURE.md` — read it before changing beha
 
 ## Commands
 - Backend: `npm run lint`, `npm run typecheck`, `npm test` (unit), `npm run test:e2e` (needs Docker), `npm run seed`
-- Frontend: `npm run lint`, `npm run typecheck`, `npm test`, `npm run build`
+- Frontend: `npm run lint`, `npm run typecheck`, `npm test`, `npm run build`, `npm run test:e2e` (Playwright, needs the stack running)
 - Full stack: `docker compose up --build`
 
 ## Rules
@@ -18,3 +18,10 @@ Design decisions live in `docs/ARCHITECTURE.md` — read it before changing beha
 - Errors always use `{ statusCode, message, error }` (global exception filter).
 - Schema changes need a new Prisma migration; hand-written SQL (CHECKs, functional/trigram indexes) lives in migrations.
 - Never commit secrets; config comes from env vars validated in `backend/src/config/env.validation.ts`.
+
+## Agents
+Project subagents live in `.claude/agents/` and run on Sonnet:
+- `backend-engineer`: owns `backend/` (API, DTOs, domain rules, Prisma, seed, backend tests).
+- `frontend-engineer`: owns `frontend/` (screens, forms, hooks, styling, frontend tests).
+- `qa-reviewer`: read-only checker (no edit tools). Runs every suite and reviews changes against the spec and these rules; reports findings to the owning agent.
+Each engineer stays inside its folder. A change to the API contract goes backend first; the backend agent reports the contract change and the frontend agent follows it. Run `qa-reviewer` after a change and before committing.
