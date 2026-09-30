@@ -8,7 +8,7 @@
 ```mermaid
 flowchart LR
   U[User<br/>browser] -->|HTTPS| FE[Frontend<br/>React SPA on nginx :8080]
-  FE -->|REST + Bearer JWT| BE[Backend API<br/>NestJS on Fastify :3000]
+  FE -->|REST + HttpOnly session cookie| BE[Backend API<br/>NestJS on Fastify :3000]
   BE -->|Prisma| DB[(PostgreSQL 16<br/>:5432)]
   BE -.->|/api/docs| SW[Swagger UI]
 ```
@@ -31,7 +31,7 @@ backend/src
 ├── config/                  # env schema, validated at startup (fail fast)
 ├── common/                  # global exception filter, @Public() decorator, shared DTOs, date utils
 ├── database/                # PrismaService + seed/
-├── auth/                    # POST /auth/login, GET /auth/me, global JWT guard
+├── auth/                    # login, logout, /auth/me, sessions, global guard (cookie or Bearer)
 ├── users/                   # user lookup
 ├── invoices/
 │   ├── domain/              # PURE functions: totals calculator, status derivation, currency map
@@ -121,11 +121,12 @@ erDiagram
 
 ## 4. API contract
 
-Swagger UI: **`/api/docs`** (JSON: `/api/docs-json`; switch off with `SWAGGER_ENABLED=false`). All routes except login/health require `Authorization: Bearer <jwt>`.
+Swagger UI: **`/api/docs`** (JSON: `/api/docs-json`; switch off with `SWAGGER_ENABLED=false`). All routes except login/health require a valid session: the web app's HttpOnly `si_session` cookie, or `Authorization: Bearer <jwt>` for API clients.
 
 | Method | Path | Auth | Success | Errors |
 |---|---|---|---|---|
-| POST | `/auth/login` | ✗ | 200 `{ accessToken, tokenType, expiresIn, user }` | 400 validation, 401 invalid credentials, 429 rate-limited |
+| POST | `/auth/login` | ✗ | 200 `{ accessToken, tokenType, expiresIn, user }` + `Set-Cookie: si_session` (HttpOnly, Secure, SameSite=Strict) | 400 validation, 401 invalid credentials, 403 foreign origin, 429 rate-limited |
+| POST | `/auth/logout` | ✓ | 204, session revoked on the server, cookie cleared | 401 |
 | GET | `/auth/me` | ✓ | 200 user profile | 401 |
 | GET | `/invoices` | ✓ | 200 `{ data, paging: { page, pageSize, total } }` | 400, 401 |
 | GET | `/invoices/:id` | ✓ | 200 invoice detail with `customer` + `items` | 400 (not a UUID), 401, 404 |
@@ -201,9 +202,10 @@ pagination stay correct:
 | Concern | Implementation |
 |---|---|
 | Passwords | bcrypt (cost 10). Login errors are generic ("Invalid email or password"); a dummy hash is compared when the user doesn't exist to reduce timing-based user enumeration. |
-| Tokens | HS256 JWT, `sub` = user id. Expiry `JWT_EXPIRES_IN` seconds (default **3600**). Secret only from env; app refuses to start without it. |
+| Tokens and sessions | HS256 JWT with `sub` (user id) and `sid` (session id). Each login creates a row in `sessions`; the guard checks it on **every request** (exists, same user, not revoked, not expired), so sign-out via `POST /auth/logout` revokes the session and every copy of its token immediately. Expiry `JWT_EXPIRES_IN` seconds (default **3600**). Secret only from env; app refuses to start without it. |
 | Route protection | A **global** JWT guard (secure by default); only `@Public()` routes (login, health) opt out. |
-| Client storage | Token kept in `sessionStorage` (cleared when the tab closes) + in-memory store. Any 401 → session cleared and redirect to `/login`. Trade-off vs httpOnly cookie discussed in §9. |
+| Client storage | **None.** The token is an `HttpOnly; Secure; SameSite=Strict` cookie (`si_session`) that JavaScript cannot read, so an XSS bug cannot steal it. The app keeps only the user profile in memory and asks `GET /auth/me` on load, so new tabs are signed in. Any 401 → redirect to `/login`. The login body still carries the JWT because the spec requires it; the web app ignores it. |
+| CSRF | SameSite=Strict (cookie never sent cross-site), plus an **Origin check**: a cookie-authenticated write, and login itself, must come from `CORS_ORIGIN` or the API's own origin (Swagger UI), else 403. Bearer requests are exempt because browsers never attach them automatically. CORS allows credentials only for the listed origins. |
 | Input | Global `ValidationPipe` with `whitelist` + `forbidNonWhitelisted` + `transform`. |
 | Transport/headers | `@fastify/helmet` on the API; security headers in the frontend nginx; CORS restricted to `CORS_ORIGIN`. |
 | Brute force | `/auth/login` rate-limited (configurable, default 10 req/min per IP). |
@@ -213,7 +215,7 @@ pagination stay correct:
 ```
 frontend/src
 ├── api/          # axios client (auth header + 401 interceptor), typed endpoint functions
-├── stores/       # Zustand auth store (persisted to sessionStorage)
+├── stores/       # Zustand auth store (user + status only; no token, nothing persisted)
 ├── features/
 │   ├── auth/     # LoginPage, RequireAuth route guard
 │   └── invoices/ # List (table on desktop / cards on mobile), Detail, Create form, hooks
@@ -267,8 +269,8 @@ flowchart LR
   *Alternative:* **HashiCorp Vault** when the platform is multi-cloud or on-premises; its database engine can also issue
   short-lived, per-service DB users instead of one long-lived password.
 * **Edge:** WAF rate limiting + managed rules in front of the API; TLS everywhere.
-* **Auth evolution:** move the frontend behind a **BFF** holding tokens in httpOnly cookies, then to
-  **OIDC Authorization Code + PKCE** (e.g. Keycloak/Cognito) with MFA — the BFF is the recommended shape for that.
+* **Auth evolution:** serve the web app and API from one domain behind a **BFF** (the HttpOnly cookie session
+  already exists), then move sign-in to **OIDC Authorization Code + PKCE** (e.g. Keycloak/Cognito) with MFA.
 * **Data:** automated backups + PITR, read replica for list/search traffic.
 
 ## 10. Roadmap — banking & payments lens
@@ -322,7 +324,7 @@ SimpleInvoice records what is **owed**. A production system also has to **collec
 | Today | Production-grade |
 |---|---|
 | Any valid token can see and create everything (per the spec) | A valid token is **not** enough: also check tenant/ownership scope, role and **approval limits**, plus **maker-checker** (the creator of a large invoice or refund can't approve it). |
-| Browser holds a bearer token | A BFF with httpOnly cookies, then **OIDC Authorization Code + PKCE** with MFA. |
+| HttpOnly session cookie with server-side sessions, revocation and an Origin check; fixed 1-hour sessions; the login body still returns the JWT (spec) | One domain behind a **BFF** holding OIDC tokens server-side. **Idle timeout** (e.g. 15 min) plus an absolute limit, revocation on password change or suspected compromise, and a session list per user. Sign-in via **OIDC Authorization Code + PKCE** with **MFA**, and **step-up authentication** (OTP or biometric) for risky actions such as payments or new payees. |
 | PII stored in clear | Column-level encryption for customer email/mobile, **masking in logs**, a retention policy (PDPA/GDPR); designed with MAS TRM guidelines in mind. |
 | Single tenant | Multi-tenant isolation with Postgres **row-level security**, and gap-free invoice sequences per tenant. |
 

@@ -66,6 +66,16 @@ export class EnvironmentVariables {
   @IsBoolean()
   SWAGGER_ENABLED = true;
 
+  /**
+   * Mark the session cookie `Secure` (sent over HTTPS only). Browsers treat http://localhost as
+   * secure, so this stays on even for the local demo; set false only for a non-localhost HTTP host.
+   */
+  @Transform(
+    ({ value }: { value: unknown }) => value === undefined || value === true || value === 'true',
+  )
+  @IsBoolean()
+  COOKIE_SECURE = true;
+
   @IsOptional()
   @IsString()
   SEED_USER_EMAIL?: string;

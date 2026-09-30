@@ -59,9 +59,9 @@ In Docker, the build is served by nginx on port 8080 with a strict Content-Secur
 
 ## How it works
 
-- **Server state lives in React Query; session state in Zustand.** The session store is persisted to `sessionStorage`, so it is cleared when the tab closes.
+- **Server state lives in React Query; session state in Zustand.** The session store holds only the user and a status, never a token, and persists nothing: the session is an HttpOnly cookie the browser sends itself. On load the app asks `GET /auth/me`, so a new tab is already signed in.
 - **The URL is the source of truth for the list.** Search, filters, sort and page are query parameters, so refresh, back/forward and shared links all land on the same view. Search is debounced.
-- **The HTTP client** (`src/api/client.ts`) adds the bearer token, and on any `401` signs the user out and sends them to login with a "session expired" notice.
+- **The HTTP client** (`src/api/client.ts`) sends requests `withCredentials` so the browser attaches the session cookie; it never handles a token. On any `401` it signs the user out and sends them to login with a "session expired" notice. Sign-out calls `POST /auth/logout`, which revokes the session on the server.
 - **Validation mirrors the API** (Zod schema in `invoice-form.schema.ts`): required fields, due date ≥ invoice date, up to 2 decimals (whole numbers for VND), quantity and rate caps, discount not larger than subtotal + tax. The API still validates everything.
 - **Totals are never sent.** The form shows an *estimated* total while typing; the stored figures come from the server. A back-dated invoice is saved as Draft but the toast shows the status the server returns (e.g. Overdue).
 - **A duplicate invoice number (`409`)** is shown on the invoice-number field rather than as a generic error.
@@ -72,7 +72,7 @@ In Docker, the build is served by nginx on port 8080 with a strict Content-Secur
 
 ## Tests
 
-**Component tests:** 57 Vitest + React Testing Library tests:
+**Component tests:** 61 Vitest + React Testing Library tests:
 
 | Area | Covers |
 |---|---|
@@ -80,10 +80,10 @@ In Docker, the build is served by nginx on port 8080 with a strict Content-Secur
 | List | debounced search, URL-driven filters, sort, past-the-end page, long values truncated |
 | Detail | rendering, currency decimals (VND) |
 | Create form | client validation, every 2-decimal price 0.01–999.99 accepted, blank tax → server default, `409` → field error |
-| HTTP client and store | bearer header, `401` → logout, query serialisation, session persistence |
+| HTTP client, store and session | cookie sent (`withCredentials`), no `Authorization` header, `401` → logout, query serialisation, no token kept or stored, session check on load (`/auth/me`) |
 | Formatting | money per currency, date helpers |
 
-**Browser smoke test:** one Playwright flow in [`e2e/invoice-flow.e2e.ts`](e2e/invoice-flow.e2e.ts). It signs in through the redirect from a protected page, creates an invoice, finds it with the search box, checks the server-calculated totals on the detail page, and signs out. It runs against a running stack (web app, API, seeded DB):
+**Browser tests:** two Playwright flows in [`e2e/invoice-flow.e2e.ts`](e2e/invoice-flow.e2e.ts). The first signs in through the redirect from a protected page, creates an invoice, finds it with the search box, checks the server-calculated totals on the detail page, and signs out. The second checks the session: the cookie is HttpOnly/Secure/SameSite=Strict and invisible to page scripts, a new tab is already signed in, and signing out in one tab ends the session in the other. It runs against a running stack (web app, API, seeded DB):
 
 ```bash
 docker compose up --build -d                   # from the repo root
@@ -100,7 +100,7 @@ To use your installed Chrome instead of downloading Chromium: `PLAYWRIGHT_CHANNE
 ```
 frontend/src/
 ├── api/          axios client, typed endpoints, shared types and currency decimals
-├── stores/       Zustand session store (sessionStorage)
+├── stores/       Zustand session store (user + status; no token)
 ├── features/
 │   ├── auth/     LoginPage, RequireAuth route guard, login schema
 │   └── invoices/ list, detail and create pages; form schema; React Query hooks; URL params hook

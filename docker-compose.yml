@@ -46,6 +46,8 @@ services:
       LOGIN_RATE_TTL: ${LOGIN_RATE_TTL:-60}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       SWAGGER_ENABLED: ${SWAGGER_ENABLED:-true}
+      # Session cookie is HttpOnly + SameSite=Strict + Secure (browsers treat http://localhost as secure).
+      COOKIE_SECURE: ${COOKIE_SECURE:-true}
       SEED_USER_EMAIL: ${SEED_USER_EMAIL:-admin@simpleinvoice.dev}
       SEED_USER_PASSWORD: ${SEED_USER_PASSWORD:-Password123!}
       SEED_USER_FULLNAME: ${SEED_USER_FULLNAME:-Demo Admin}

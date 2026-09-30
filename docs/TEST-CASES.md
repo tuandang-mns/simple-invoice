@@ -155,9 +155,9 @@ The public repository was cloned over HTTPS into an empty folder (no credentials
 
 | Suite | Command | Result |
 |---|---|---|
-| Backend unit | `cd backend && npm test` | 72 / 72 ✅ |
-| Backend e2e (Testcontainers) | `cd backend && npm run test:e2e` | 51 / 51 ✅ |
-| Frontend | `cd frontend && npm test` | 57 / 57 ✅ |
+| Backend unit | `cd backend && npm test` | 78 / 78 ✅ |
+| Backend e2e (Testcontainers) | `cd backend && npm run test:e2e` | 58 / 58 ✅ |
+| Frontend | `cd frontend && npm test` | 61 / 61 ✅ |
 | API black-box | `RUN_RATE_LIMIT=1 node scripts/api-test.mjs` | 33 / 33 ✅ |
-| Browser smoke (Playwright) | `cd frontend && npm run test:e2e` | 1 / 1 ✅ (also 3 / 3 with `--repeat-each=3`, parallel) |
+| Browser (Playwright) | `cd frontend && npm run test:e2e` | 2 / 2 ✅ (invoice journey; session across tabs) |
 | Lint + typecheck | `npm run lint && npm run typecheck` (both apps) | clean ✅ |

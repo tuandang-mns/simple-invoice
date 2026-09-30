@@ -4,6 +4,8 @@ import type { FastifyRequest } from 'fastify';
 export interface JwtPayload {
   sub: string;
   email: string;
+  /** Session id (row in `sessions`); lets the server revoke this token before it expires. */
+  sid: string;
 }
 
 export type AuthenticatedRequest = FastifyRequest & { user: JwtPayload };

@@ -1,26 +1,32 @@
 import { describe, expect, it } from 'vitest';
-import { isSessionValid, useAuthStore } from './auth.store';
+import { useAuthStore } from './auth.store';
+
+const profile = { id: '1', email: 'a@b.c', fullname: 'A', createdAt: '' };
 
 describe('auth store', () => {
-  it('computes expiry from expiresIn and clears everything on logout', () => {
+  it('starts unknown until the API has been asked', () => {
+    expect(useAuthStore.getInitialState().status).toBe('unknown');
+  });
+
+  it('records the signed-in user and expiry, and clears everything on logout', () => {
     const before = Date.now();
-    useAuthStore
-      .getState()
-      .login('t', 3600, { id: '1', email: 'a@b.c', fullname: 'A', createdAt: '' });
-    const { expiresAt } = useAuthStore.getState();
-    expect(expiresAt).toBeGreaterThanOrEqual(before + 3600_000);
-    expect(isSessionValid(useAuthStore.getState())).toBe(true);
+    useAuthStore.getState().login(profile, 3600);
+    expect(useAuthStore.getState()).toMatchObject({ status: 'authenticated', user: profile });
+    expect(useAuthStore.getState().expiresAt).toBeGreaterThanOrEqual(before + 3600_000);
 
     useAuthStore.getState().logout('expired');
     expect(useAuthStore.getState()).toMatchObject({
-      token: null,
+      status: 'anonymous',
       user: null,
+      expiresAt: null,
       logoutReason: 'expired',
     });
-    expect(isSessionValid(useAuthStore.getState())).toBe(false);
   });
 
-  it('treats a past expiry as invalid', () => {
-    expect(isSessionValid({ token: 't', expiresAt: Date.now() - 1 })).toBe(false);
+  it('holds no token and writes nothing to web storage', () => {
+    useAuthStore.getState().login(profile, 3600);
+    expect(Object.keys(useAuthStore.getState())).not.toContain('token');
+    expect(sessionStorage.length).toBe(0);
+    expect(localStorage.length).toBe(0);
   });
 });

@@ -73,6 +73,7 @@ The API validates its environment on start-up ([`env.validation.ts`](src/config/
 | `APP_TIMEZONE` | `Asia/Singapore` | the business "today" used to derive Overdue |
 | `LOGIN_RATE_LIMIT` / `LOGIN_RATE_TTL` | `10` / `60` | login attempts per window (seconds) |
 | `SWAGGER_ENABLED` | `true` | set `false` to hide `/api/docs` |
+| `COOKIE_SECURE` | `true` | `Secure` flag on the session cookie (browsers treat `http://localhost` as secure); `false` only for a non-localhost HTTP host |
 | `LOG_LEVEL` | `info` | `fatal` … `trace`, or `silent` |
 | `SEED_USER_EMAIL` / `SEED_USER_PASSWORD` / `SEED_USER_FULLNAME` | none / none / `Demo Admin` | used by the seed only |
 
@@ -96,11 +97,12 @@ docker compose exec backend node dist/database/seed/seed.js --reset
 
 ## API
 
-Interactive docs are at **`/api/docs`**. Every route except login and health requires `Authorization: Bearer <token>`.
+Interactive docs are at **`/api/docs`**. Every route except login and health requires a valid session: the HttpOnly `si_session` cookie (the web app) or `Authorization: Bearer <token>` (API clients). Sign-out revokes the session on the server.
 
 | Method | Endpoint | Description |
 |---|---|---|
-| POST | `/auth/login` | Email + password → `{ accessToken, tokenType, expiresIn, user }` |
+| POST | `/auth/login` | Email + password → `{ accessToken, tokenType, expiresIn, user }`, and sets the HttpOnly session cookie |
+| POST | `/auth/logout` | Revokes the session on the server and clears the cookie → `204` |
 | GET | `/auth/me` | Current user profile |
 | GET | `/invoices` | `page`, `pageSize` (≤100), `sortBy` (`invoiceDate`/`dueDate`/`totalAmount`), `ordering` (`ASC`/`DESC`), `status` (`Draft`/`Pending`/`Paid`/`Overdue`), `keyword`, `fromDate`, `toDate` → `{ data, paging: { page, pageSize, total } }` |
 | GET | `/invoices/:id` | Invoice with customer and line items |
@@ -121,8 +123,8 @@ curl -s -X POST http://localhost:3000/auth/login -H 'content-type: application/j
 
 | Suite | Count | Covers |
 |---|---|---|
-| Unit (`npm test`) | 72 | Appendix A totals reproduced exactly; half-up rounding per currency (VND whole dong); no float drift; Overdue edge cases (due today, Paid, Draft); DTO rules (caps, dates, due ≥ invoice date); query builder (status → SQL, LIKE escaping); auth; error filter; seed covers every status whatever day it runs |
-| E2E (`npm run test:e2e`) | 51 | Login → create → list → detail on a real PostgreSQL. The four status filters sum to the total; every page walked returns each invoice once; sort order per field; inclusive date bounds; list = detail; forged / expired / `alg:none` tokens rejected; same error for unknown email and wrong password; DB-level duplicate → 409 |
+| Unit (`npm test`) | 78 | Sessions: active / revoked / expired / other user's; logout revokes only its own session. Appendix A totals reproduced exactly; half-up rounding per currency (VND whole dong); no float drift; Overdue edge cases (due today, Paid, Draft); DTO rules (caps, dates, due ≥ invoice date); query builder (status → SQL, LIKE escaping); auth; error filter; seed covers every status whatever day it runs |
+| E2E (`npm run test:e2e`) | 58 | HttpOnly/Secure/SameSite cookie; cookie-only auth; CSRF Origin check (writes and login); sign-out kills every copy of the token; credentialed CORS only for our origin. Login → create → list → detail on a real PostgreSQL. The four status filters sum to the total; every page walked returns each invoice once; sort order per field; inclusive date bounds; list = detail; forged / expired / `alg:none` tokens rejected; same error for unknown email and wrong password; DB-level duplicate → 409 |
 
 The e2e suite starts its own PostgreSQL through Testcontainers, so it needs Docker but no running DB or seed.
 

@@ -58,7 +58,12 @@ describe('LoginPage', () => {
 
     await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/invoices'));
     expect(login).toHaveBeenCalledWith('admin@simpleinvoice.dev', 'Password123!');
-    expect(useAuthStore.getState().token).toBe('jwt-token');
+    expect(useAuthStore.getState()).toMatchObject({
+      status: 'authenticated',
+      user: { email: 'admin@simpleinvoice.dev' },
+    });
+    // The token in the response body is never kept by the web app (it uses the HttpOnly cookie).
+    expect(JSON.stringify(useAuthStore.getState())).not.toContain('jwt-token');
   });
 
   it('shows the server error for invalid credentials', async () => {
@@ -71,7 +76,7 @@ describe('LoginPage', () => {
     await user.click(screen.getByRole('button', { name: 'Sign in' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Invalid email or password');
-    expect(useAuthStore.getState().token).toBeNull();
+    expect(useAuthStore.getState().status).toBe('anonymous');
     expect(screen.getByLabelText(/^password/i)).toHaveValue(''); // rejected password is cleared
   });
 

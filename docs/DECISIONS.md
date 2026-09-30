@@ -126,11 +126,12 @@ Rule for new work: a new library or a non-obvious design choice gets an entry he
 
 ## Security
 
-### DEC-18 One access token, kept in sessionStorage
-- **Chose:** a 1-hour HS256 JWT, stored in `sessionStorage`, with no refresh token.
-- **Instead of:** `localStorage` (survives closing the browser), or an httpOnly refresh cookie / backend-for-frontend.
-- **Why:** the spec asks for a login that returns a JWT. `sessionStorage` is cleared when the tab closes. Refresh-token rotation adds endpoints, CSRF protection and multi-tab races, which is a lot of risk for a take-home.
-- **Cost:** JavaScript can read the token, so an XSS bug would expose it (mitigated by a strict Content-Security-Policy), and users sign in again after an hour. Production path: BFF with httpOnly cookies (ARCHITECTURE §10.5).
+### DEC-18 HttpOnly cookie sessions with server-side revocation
+- **Chose:** login sets the JWT as an `HttpOnly; Secure; SameSite=Strict` cookie; the token carries a session id, and a `sessions` row is checked on every request; `POST /auth/logout` revokes it. Cookie-authenticated writes must come from our own origin. The web app stores nothing and asks `GET /auth/me` on load.
+- **Instead of:** keeping the JWT in `sessionStorage` (our first version), `localStorage`, or refresh-token rotation.
+- **Why:** a banking app must not let page scripts touch the session token. With the cookie an XSS bug cannot steal it, sign-out really ends the session (a copied token dies too), and new tabs share the sign-in. Checking a session row costs one primary-key lookup per request.
+- **Cost:** CSRF becomes our job (SameSite=Strict + Origin check, tested); the login body still returns the JWT because the spec requires it; sessions are a fixed hour with no idle timeout or refresh. `@fastify/cookie` is pinned to 11.1.0, the last release whose `cookie` dependency is CommonJS (Jest can't load the ESM-only one).
+- **Revisit when:** moving to one domain with a BFF and OIDC + PKCE, MFA and idle timeouts (ARCHITECTURE §10.5).
 
 ### DEC-19 Protected by default
 - **Chose:** a global JWT guard; routes opt out with `@Public()` (only login and health).
@@ -182,8 +183,8 @@ Rule for new work: a new library or a non-obvious design choice gets an entry he
 - **Why:** the risky parts are SQL: the status conditions, escaping, the case-insensitive index, CHECK constraints. Mocks would test none of them.
 - **Cost:** the e2e suite needs Docker and takes about a minute.
 
-### DEC-26 One browser smoke test, not a browser suite
-- **Chose:** a single Playwright flow (sign in → create → search → detail → sign out), plus a black-box API script.
+### DEC-26 Two browser flows, not a browser suite
+- **Chose:** two Playwright flows (the invoice journey, and the session across tabs), plus a black-box API script.
 - **Instead of:** a large Playwright suite.
 - **Why:** edge cases are cheaper and more stable in unit and component tests; the browser test proves the pieces connect.
 - **Cost:** browser-only issues (layout, real date pickers) are checked by hand; the QA log records those runs.
@@ -210,7 +211,7 @@ Deliberately not built for the assessment. Each has a trigger and a place in the
 |---|---|---|---|
 | Money as decimal strings | Breaks the spec's number examples; exact today within the caps (DEC-07) | Higher caps, aggregates, 3+ decimal currencies | ARCHITECTURE §10.1 |
 | `Idempotency-Key` on create | The unique invoice number already stops duplicates; a retry gets 409 instead of the original 201 | Clients that retry automatically, payment-like operations | §10.3 |
-| Refresh tokens / BFF with httpOnly cookies | Endpoints, CSRF and multi-tab handling for little gain here (DEC-18) | Real users, longer sessions | §10.5 |
+| Refresh tokens, idle timeout, OIDC + MFA | The HttpOnly cookie session with revocation covers the core risk (DEC-18); these add an identity provider and more flows | Real users, longer sessions, payments | §10.5 |
 | Roles and permissions | The spec says every user sees all invoices | Multiple teams, approval limits, maker-checker | §10.5 |
 | Append-only audit log | No edits or status changes exist yet to audit | Any edit, payment or status transition | §10.3 |
 | Payments ledger | Only create and read are in scope; `totalPaid` is seed data | Recording payments | §10.2 |

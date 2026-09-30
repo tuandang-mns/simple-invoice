@@ -25,11 +25,11 @@ describe('RequireAuth', () => {
     expect(screen.getByText('secret invoices')).toBeInTheDocument();
   });
 
-  it('treats an expired token as signed out', () => {
-    signIn();
-    useAuthStore.setState({ expiresAt: Date.now() - 1000 });
+  it('waits (spinner, no redirect) while the session is still being checked', () => {
+    useAuthStore.setState({ status: 'unknown' });
     renderWithProviders(<Protected />, { route: '/invoices', path: '/invoices' });
+    expect(screen.getByLabelText('Checking your session')).toBeInTheDocument();
     expect(screen.queryByText('secret invoices')).not.toBeInTheDocument();
-    expect(screen.getByTestId('location')).toHaveTextContent('/login');
+    expect(screen.getByTestId('location')).toHaveTextContent('/invoices');
   });
 });

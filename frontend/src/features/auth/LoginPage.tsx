@@ -20,13 +20,13 @@ import { useForm } from 'react-hook-form';
 import { Navigate, useLocation, useNavigate, type Location } from 'react-router-dom';
 import { authApi } from '../../api/auth.api';
 import { getErrorMessages } from '../../api/client';
-import { isSessionValid, useAuthStore } from '../../stores/auth.store';
+import { useAuthStore } from '../../stores/auth.store';
 import { loginSchema, type LoginFormValues } from './login.schema';
 
 export function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { token, expiresAt, logoutReason, login } = useAuthStore();
+  const { status, logoutReason, login } = useAuthStore();
   const [showPassword, setShowPassword] = useState(false);
 
   // Where to go after signing in: the page the user was bounced from (deep link), else the list.
@@ -49,13 +49,15 @@ export function LoginPage() {
   const loginMutation = useMutation({
     mutationFn: (values: LoginFormValues) => authApi.login(values.email, values.password),
     onSuccess: (res) => {
-      login(res.accessToken, res.expiresIn, res.user);
+      // The API also returns the token in the body (for API clients); the web app ignores it
+      // and relies on the HttpOnly cookie set by the same response.
+      login(res.user, res.expiresIn);
       navigate(redirectTo, { replace: true });
     },
     onError: () => resetField('password'), // never leave a rejected password in the field
   });
 
-  if (isSessionValid({ token, expiresAt })) {
+  if (status === 'authenticated') {
     return <Navigate to={redirectTo} replace />;
   }
 

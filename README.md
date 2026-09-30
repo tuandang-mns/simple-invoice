@@ -49,6 +49,8 @@ To change a setting, copy `.env.example` to `.env` in the repo root and edit it.
 
 **Port already in use?** Pick another host port, e.g. `DB_PORT=5433 docker compose up --build`. The API URL is baked into the web build, so a different API port also needs `VITE_API_BASE_URL=http://localhost:<port>`; a different web port needs `CORS_ORIGIN=http://localhost:<port>`.
 
+**`dependency failed to start: container simple-invoice-backend-1 is unhealthy`?** The API's health check includes the database, so if the database was down for a while (for example its port was taken), the old backend container is still marked unhealthy. Run `docker compose up --build -d` again: the next health check passes within about 10 seconds. If it keeps failing, `docker compose logs backend` shows why.
+
 ## Run without Docker
 
 For development with hot reload, run each part on its own:
@@ -81,11 +83,11 @@ simple-invoice/
 
 | Suite | Count | Run |
 |---|---|---|
-| Backend unit | 72 | `cd backend && npm test` |
-| Backend e2e (real PostgreSQL via Testcontainers) | 51 | `cd backend && npm run test:e2e` |
-| Frontend | 57 | `cd frontend && npm test` |
+| Backend unit | 78 | `cd backend && npm test` |
+| Backend e2e (real PostgreSQL via Testcontainers) | 58 | `cd backend && npm run test:e2e` |
+| Frontend | 61 | `cd frontend && npm test` |
 | Black-box API (against the running stack) | 32 | `node scripts/api-test.mjs` |
-| Browser smoke test (Playwright, against the running stack) | 1 flow | `cd frontend && npm run test:e2e` |
+| Browser tests (Playwright, against the running stack) | 2 flows | `cd frontend && npm run test:e2e` |
 
 CI (`.github/workflows/ci.yml`) runs lint, typecheck and all tests on every push and pull request, then starts the full stack with `docker compose up` and runs the API script and the browser test against it. What each suite covers is in the backend and frontend READMEs; the acceptance cases and the QA log (15 defects found and fixed, most with a regression test) are in [`docs/TEST-CASES.md`](docs/TEST-CASES.md).
 
@@ -121,8 +123,11 @@ Details and trade-offs are in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md); ev
 - **Only create and read**: there's no edit, status transition or payment recording. `totalPaid` is a plain number (only the seed sets it), not an append-only payments ledger with double-entry postings and reversals.
 - **One status field**: document, collection and settlement states aren't separated, and there's no "payment accepted ≠ final" distinction yet (no payments are collected).
 - **Exactly one line item per invoice**, per the spec. The schema and calculator already support many.
-- **JWT is kept in `sessionStorage`**. It's cleared on tab close and the frontend has a strict CSP, but this is still readable by JavaScript if an XSS bug existed. The production path is a BFF with httpOnly cookies.
-- **No refresh tokens**: the user signs in again when the token expires (default 1 h).
+- **Sessions are HttpOnly cookies with server-side revocation, but not yet a full banking session.** The web app never sees the token: login sets it as an `HttpOnly; Secure; SameSite=Strict` cookie, every request is checked against a server-side session, and sign-out revokes it at once (any copied token stops working). Cookie-authenticated writes must come from our own origin (CSRF). Still missing for a banking-grade session:
+  - **No idle timeout and no refresh token:** a session lasts a fixed 1 hour (`JWT_EXPIRES_IN`), then you sign in again.
+  - **No MFA or step-up authentication** for risky actions.
+  - **The login response still includes the JWT**, because the spec requires it (API clients use it as a Bearer token); the web app ignores it.
+  - **The web app and API are separate origins** (`:8080` and `:3000`), which works because they are the same site; production would serve both from one domain behind a backend-for-frontend, with OIDC Authorization Code + PKCE ([`docs/ARCHITECTURE.md` §10.5](docs/ARCHITECTURE.md#105-security-and-compliance)).
 - **Sorting by amount across currencies** compares raw numbers (no FX conversion).
 - **Amounts travel as JSON numbers.** Storage (`NUMERIC`) and maths (`decimal.js`) are exact decimals; the weak link is only the JSON number, which clients read as a binary float that holds cents exactly up to about 90 trillion. The caps keep the largest possible total at 2×10^13, about 4.5× below that, so every amount the API returns today is exact. Raising the caps, returning cross-invoice aggregates or adding currencies with more decimals would require the switch to decimal strings (`"2180.00"`); the migration path is in [`docs/ARCHITECTURE.md` §10.1](docs/ARCHITECTURE.md#101-money-representation).
 - **No `Idempotency-Key`**: a retry after a network timeout gets `409` (the invoice number acts as the business key) rather than the original `201` response.
@@ -134,7 +139,7 @@ Details and trade-offs are in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md); ev
 - **Demo secrets are in `docker-compose.yml`.** The fallback DB password and JWT secret are public local-demo values, so the stack runs with no setup. Anyone who reads this repository could sign tokens for a deployment that kept them. Secrets belong to the platform: in production they come from **AWS Secrets Manager**, injected by the ECS task definition and rotated there (HashiCorp Vault is the alternative for multi-cloud or on-premises). Details in [`docs/ARCHITECTURE.md` §9](docs/ARCHITECTURE.md#9-production-deployment-target-not-built-for-the-assessment). The Docker ports are bound to `127.0.0.1`, so the demo stack is not reachable from other machines.
 - **Swagger UI is on by default** for reviewers. In production, set `SWAGGER_ENABLED=false` (or put the docs behind auth).
 - Hand-written SQL in the migration (functional unique index, trigram indexes, CHECKs) isn't represented in `schema.prisma`. Future `prisma migrate dev` diffs must keep it.
-- **Browser testing is one smoke flow** (Playwright: sign in → create → search → detail → sign out). Edge cases are covered by the backend e2e and frontend component tests; a larger browser suite (mobile viewport, error paths, visual regression) is the next step.
+- **Browser testing is two flows** (Playwright: sign in → create → search → detail → sign out; and the session: new tab signed in, token unreadable by scripts, sign-out ends every tab). Edge cases are covered by the backend e2e and frontend component tests; a larger browser suite (mobile viewport, error paths, visual regression) is the next step.
 
 How each limitation would be solved in production (money as strings/minor units, payments ledger and double-entry journal, separated state dimensions, idempotency keys, outbox/inbox, reconciliation, maker-checker, OIDC + PKCE, PDPA) is in [`docs/ARCHITECTURE.md` §9–10](docs/ARCHITECTURE.md#10-roadmap--banking--payments-lens).
 

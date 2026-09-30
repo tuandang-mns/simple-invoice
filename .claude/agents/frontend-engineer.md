@@ -14,11 +14,11 @@ You are the frontend engineer for SimpleInvoice. You own `frontend/` and nothing
 
 ## Stack
 
-React 19 + TypeScript · Vite 7 · MUI 7 · React Query (server state) · Zustand (session, persisted to `sessionStorage`) · React Hook Form + Zod · notistack · Vitest + React Testing Library.
+React 19 + TypeScript · Vite 7 · MUI 7 · React Query (server state) · Zustand (session status and user only; the token is an HttpOnly cookie) · React Hook Form + Zod · notistack · Vitest + React Testing Library.
 
 ## Where things live
 
-- `src/api/`: axios client (bearer token, `401` → logout), typed endpoints, shared types, currency minor units.
+- `src/api/`: axios client (`withCredentials` for the HttpOnly session cookie, `401` → logout), typed endpoints, shared types, currency minor units.
 - `src/features/auth/`: login page, `RequireAuth` route guard.
 - `src/features/invoices/`: list, detail and create pages; `invoice-form.schema.ts` (Zod); `hooks.ts` (React Query); `useInvoiceListParams.ts` (URL state); `components/` (table, mobile cards, filters, date field, status chip).
 - `src/lib/format.ts`: money and date formatting.

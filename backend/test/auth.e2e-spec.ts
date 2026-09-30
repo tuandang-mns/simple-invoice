@@ -122,6 +122,114 @@ describe('Auth (e2e)', () => {
     });
   });
 
+  describe('Browser session (HttpOnly cookie) and sign-out', () => {
+    // The guard trusts CORS_ORIGIN; the test app uses the default.
+    const WEB_ORIGIN = 'http://localhost:5173';
+
+    const loginRes = () =>
+      ctx
+        .http()
+        .post('/auth/login')
+        .set('Origin', WEB_ORIGIN)
+        .send({ email: EMAIL, password: PASSWORD })
+        .expect(200);
+    const sessionCookie = (res: { headers: Record<string, unknown> }) =>
+      ((res.headers['set-cookie'] as string[] | undefined) ?? []).find((c) =>
+        c.startsWith('si_session='),
+      );
+    const cookiePair = (setCookie: string) => setCookie.split(';')[0];
+
+    it('sets the token as an HttpOnly, Secure, SameSite=Strict cookie', async () => {
+      const cookie = sessionCookie(await loginRes());
+      expect(cookie).toBeDefined();
+      expect(cookie).toMatch(/HttpOnly/i);
+      expect(cookie).toMatch(/Secure/i);
+      expect(cookie).toMatch(/SameSite=Strict/i);
+      expect(cookie).toMatch(/Path=\//);
+      expect(cookie).toMatch(/Max-Age=3600/);
+    });
+
+    it('authenticates with the cookie alone (no Authorization header)', async () => {
+      const cookie = cookiePair(sessionCookie(await loginRes())!);
+      const res = await ctx.http().get('/auth/me').set('Cookie', cookie).expect(200);
+      expect(res.body).toMatchObject({ id: userId, email: EMAIL });
+    });
+
+    it('blocks cookie-authenticated writes from a missing or foreign Origin (CSRF)', async () => {
+      const cookie = cookiePair(sessionCookie(await loginRes())!);
+      for (const origin of [undefined, 'https://evil.example']) {
+        const req = ctx.http().post('/invoices').set('Cookie', cookie).send({});
+        const res = await (origin ? req.set('Origin', origin) : req).expect(403);
+        expect(res.body).toEqual({
+          statusCode: 403,
+          message: 'Request origin not allowed',
+          error: 'Forbidden',
+        });
+      }
+      // From the web app's own origin the request passes the guard and reaches validation.
+      await ctx
+        .http()
+        .post('/invoices')
+        .set('Cookie', cookie)
+        .set('Origin', WEB_ORIGIN)
+        .send({})
+        .expect(400);
+    });
+
+    it("treats the API's own origin (Swagger UI) as trusted", async () => {
+      const cookie = cookiePair(sessionCookie(await loginRes())!);
+      await ctx
+        .http()
+        .post('/invoices')
+        .set('Cookie', cookie)
+        .set('Host', 'api.example')
+        .set('Origin', 'http://api.example') // same origin as the request itself
+        .send({})
+        .expect(400); // passed the guard, reached validation
+    });
+
+    it('refuses to start a session for a foreign Origin (login CSRF)', async () => {
+      const res = await ctx
+        .http()
+        .post('/auth/login')
+        .set('Origin', 'https://evil.example')
+        .send({ email: EMAIL, password: PASSWORD })
+        .expect(403);
+      expect(sessionCookie(res)).toBeUndefined();
+    });
+
+    it('sign-out revokes the session on the server: every copy of the token stops working', async () => {
+      const res = await loginRes();
+      const token = (res.body as { accessToken: string }).accessToken;
+      const cookie = cookiePair(sessionCookie(res)!);
+      await me(`Bearer ${token}`).expect(200);
+
+      const out = await ctx
+        .http()
+        .post('/auth/logout')
+        .set('Cookie', cookie)
+        .set('Origin', WEB_ORIGIN)
+        .expect(204);
+      expect(sessionCookie(out)).toMatch(/si_session=;/); // cleared in the browser
+
+      await me(`Bearer ${token}`).expect(401); // a copied token is dead too
+      await ctx.http().get('/auth/me').set('Cookie', cookie).expect(401);
+      const other = await ctx.prisma.session.count({ where: { userId, revokedAt: null } });
+      expect(other).toBeGreaterThan(0); // other sessions (other devices) are untouched
+    });
+
+    it('allows credentialed CORS only for the configured origin', async () => {
+      const res = await ctx
+        .http()
+        .options('/auth/me')
+        .set('Origin', 'http://localhost')
+        .set('Access-Control-Request-Method', 'GET')
+        .expect(204);
+      expect(res.headers['access-control-allow-origin']).toBe('http://localhost');
+      expect(res.headers['access-control-allow-credentials']).toBe('true');
+    });
+  });
+
   it('serves /health without authentication', async () => {
     expect((await ctx.http().get('/health').expect(200)).body).toEqual({ status: 'ok' });
   });

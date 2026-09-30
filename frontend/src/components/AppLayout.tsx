@@ -36,7 +36,10 @@ export function AppLayout() {
     return () => clearTimeout(timer);
   }, [expiresAt, logout]);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    // Revoke on the server first, so the session (and any copy of it) is dead, not just forgotten.
+    // Sign out locally even if the call fails, e.g. offline.
+    await authApi.logout().catch(() => undefined);
     queryClient.clear(); // don't leave the previous user's data in the cache
     logout('manual');
   };

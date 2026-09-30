@@ -21,7 +21,7 @@ NestJS 11 on the Fastify adapter · Prisma 6 · PostgreSQL 16 · class-validator
 - `src/invoices/domain/`: pure business rules. `invoice-calculator.ts` (totals), `money.ts` (Decimal, half-up rounding), `invoice-status.ts` (Overdue derivation), `currency.ts` (supported currencies and their minor units; VND has 0).
 - `src/invoices/dto/`: request validation and Swagger contracts. Custom validators in `src/common/validators/`.
 - `src/invoices/invoice-query.builder.ts`: list filters, status → SQL predicates, sort, LIKE escaping.
-- `src/auth/`: login, `/auth/me`, global JWT guard. Routes are protected by default; opt out only with `@Public()`.
+- `src/auth/`: login (sets the HttpOnly session cookie), logout (revokes), `/auth/me`, server-side sessions, global guard (cookie or Bearer, Origin check for cookie writes). Routes are protected by default; opt out only with `@Public()`.
 - `src/config/env.validation.ts`: every env var, validated at start-up.
 - `prisma/`: schema and migrations. Hand-written SQL (CHECK constraints, `lower(invoice_number)` unique index, trigram indexes) lives in migrations and is not in `schema.prisma`.
 - `src/database/seed/`: idempotent seed; Appendix A invoice is self-checked against the published figures.

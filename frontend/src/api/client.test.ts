@@ -26,18 +26,19 @@ describe('http client', () => {
     http.defaults.adapter = original;
   });
 
-  it('sends the bearer token and serialises list params into the query string', async () => {
+  it('sends the session cookie (withCredentials) and serialises list params', async () => {
     signIn();
     const seen = fakeServer(200);
     await http.get('/invoices', { params: { page: 2, status: 'Overdue', keyword: undefined } });
 
-    expect(seen[0].headers.Authorization).toBe('Bearer test-token');
+    expect(seen[0].withCredentials).toBe(true);
     expect(http.getUri(seen[0])).toBe('http://localhost:3000/invoices?page=2&status=Overdue');
   });
 
-  it('sends no Authorization header when signed out', async () => {
+  it('never sends an Authorization header: the token is not available to page scripts', async () => {
+    signIn();
     const seen = fakeServer(200);
-    await http.post('/auth/login', {});
+    await http.get('/invoices');
     expect(seen[0].headers.Authorization).toBeUndefined();
   });
 
@@ -49,7 +50,7 @@ describe('http client', () => {
       error: 'Unauthorized',
     });
     await expect(http.get('/invoices')).rejects.toBeInstanceOf(AxiosError);
-    expect(useAuthStore.getState()).toMatchObject({ token: null, logoutReason: 'expired' });
+    expect(useAuthStore.getState()).toMatchObject({ status: 'anonymous', logoutReason: 'expired' });
   });
 
   it('does not treat a failed login as an expired session', async () => {

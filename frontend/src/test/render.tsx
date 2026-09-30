@@ -40,14 +40,17 @@ export function renderWithProviders(
 }
 
 export function signIn() {
-  useAuthStore.getState().login('test-token', 3600, {
-    id: 'u1',
-    email: 'admin@simpleinvoice.dev',
-    fullname: 'Demo Admin',
-    createdAt: '2026-01-01T00:00:00.000Z',
-  });
+  useAuthStore.getState().login(
+    {
+      id: 'u1',
+      email: 'admin@simpleinvoice.dev',
+      fullname: 'Demo Admin',
+      createdAt: '2026-01-01T00:00:00.000Z',
+    },
+    3600,
+  );
 }
 
 export function signOut() {
-  useAuthStore.setState({ token: null, expiresAt: null, user: null, logoutReason: null });
+  useAuthStore.setState({ status: 'anonymous', user: null, expiresAt: null, logoutReason: null });
 }

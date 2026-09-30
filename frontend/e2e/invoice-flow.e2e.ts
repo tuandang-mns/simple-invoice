@@ -1,7 +1,15 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 
 const EMAIL = process.env.SEED_USER_EMAIL ?? 'admin@simpleinvoice.dev';
 const PASSWORD = process.env.SEED_USER_PASSWORD ?? 'Password123!';
+
+async function signIn(page: Page) {
+  await page.goto('/login');
+  await page.getByLabel('Email address').fill(EMAIL);
+  await page.getByLabel('Password', { exact: true }).fill(PASSWORD);
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page).toHaveURL(/\/invoices$/);
+}
 
 test('sign in, create an invoice, find it in the list, open it, sign out', async ({ page }) => {
   const invoiceNumber = `PW-${Date.now().toString(36).toUpperCase()}`;
@@ -49,4 +57,36 @@ test('sign in, create an invoice, find it in the list, open it, sign out', async
   await expect(page).toHaveURL(/\/login/);
   await page.goto('/invoices');
   await expect(page).toHaveURL(/\/login/);
+});
+
+test('a new tab shares the session, page scripts cannot read the token, sign-out ends it everywhere', async ({
+  context,
+  page,
+}) => {
+  await signIn(page);
+
+  // The session is an HttpOnly cookie: invisible to JavaScript and absent from web storage.
+  const exposed = await page.evaluate(() => ({
+    cookie: document.cookie,
+    storage: JSON.stringify({ ...sessionStorage }) + JSON.stringify({ ...localStorage }),
+  }));
+  expect(exposed.cookie).not.toContain('si_session');
+  expect(exposed.storage).not.toMatch(/eyJ/); // no JWT anywhere scripts can reach
+  const cookies = await context.cookies();
+  expect(cookies.find((c) => c.name === 'si_session')).toMatchObject({
+    httpOnly: true,
+    secure: true,
+    sameSite: 'Strict',
+  });
+
+  // A second tab opened by typing the URL is already signed in.
+  const second = await context.newPage();
+  await second.goto('/invoices');
+  await expect(second.getByRole('heading', { name: 'Invoices' })).toBeVisible();
+
+  // Signing out in one tab revokes the session on the server, so the other tab loses it too.
+  await page.getByRole('button', { name: 'Sign out' }).click();
+  await expect(page).toHaveURL(/\/login/);
+  await second.reload();
+  await expect(second).toHaveURL(/\/login/);
 });

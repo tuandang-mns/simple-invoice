@@ -25,8 +25,23 @@ model User {
   fullname     String
   createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   invoices     Invoice[]
+  sessions     Session[]
 
   @@map("users")
+}
+
+/// One row per sign-in. The access token carries its id (`sid`); the auth guard checks the row on
+/// every request, so signing out (revokedAt) ends the session immediately, even for a copied token.
+model Session {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz(3)
+  revokedAt DateTime? @map("revoked_at") @db.Timestamptz(3)
+
+  @@index([userId])
+  @@map("sessions")
 }
 
 model Invoice {
