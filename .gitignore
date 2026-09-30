@@ -1,0 +1,37 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+*.tsbuildinfo
+.vite/
+
+# Tests and coverage
+coverage/
+playwright-report/
+test-results/
+.eslintcache
+
+# Environment and secrets (only the documented examples are committed)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Editors and OS
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+.DS_Store
+Thumbs.db
+
+# Local AI-agent settings (the shared project rules live in CLAUDE.md)
+.claude/settings.local.json
